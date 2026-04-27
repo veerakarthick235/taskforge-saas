@@ -1,0 +1,12 @@
+# Backend
+__pycache__/
+.pytest_cache/
+.env
+
+# Frontend
+node_modules/
+dist/
+.env
+
+# System
+.DS_Store

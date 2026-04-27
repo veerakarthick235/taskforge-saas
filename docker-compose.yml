@@ -1,0 +1,90 @@
+# ============================================================
+#  TaskForge — Full-Stack Docker Compose
+#  Profiles: dev (default), prod
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: taskforge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taskforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskforge_secret_2024}
+      POSTGRES_DB: taskforge
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./backend/scripts/002_rls_policies.sql:/docker-entrypoint-initdb.d/02_rls.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (caching / rate-limit backing store) ──
+  redis:
+    image: redis:7-alpine
+    container_name: taskforge-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (production profile) ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskforge-backend
+    restart: unless-stopped
+    profiles: ["prod"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://taskforge:${POSTGRES_PASSWORD:-taskforge_secret_2024}@postgres:5432/taskforge
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      RATE_LIMIT_PER_MINUTE: 60
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: "false"
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Frontend (production profile) ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: taskforge-frontend
+    restart: unless-stopped
+    profiles: ["prod"]
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:
+    driver: local
