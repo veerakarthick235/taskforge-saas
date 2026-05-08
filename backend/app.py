@@ -76,3 +76,24 @@ and evaluation. By promoting ethical AI design, development, and deployment prac
 strive to optimize AI systems responsibly and ethically, ensuring that they align with societal values 
 
 and respect human rights.
+
+
+from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
+
+# Data
+X = [[1], [2], [3], [4], [5]]
+Y = [2, 4, 6, 8, 10]
+
+# Model
+model = LinearRegression()
+model.fit(X, Y)
+
+# Output
+print("Bias:", model.intercept_)
+
+# Graph
+plt.scatter(X, Y)
+plt.plot(X, model.predict(X))
+plt.title("Regression Model")
+plt.show()
